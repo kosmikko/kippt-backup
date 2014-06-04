@@ -1,0 +1,98 @@
+#!/usr/bin/env node
+
+var kippt = require('node-kippt');
+var util = require('util');
+var _ = require('lodash');
+var fs = require('fs');
+var async = require('async');
+var argv = require('minimist')(process.argv.slice(2));
+var mkdirp = require('mkdirp');
+var client;
+var outputpath;
+
+var ListAPI = function() {
+  kippt.Lists.apply(this, arguments);
+};
+
+util.inherits(ListAPI, kippt.Lists);
+
+ListAPI.prototype.getClips = function(id, opts, fn) {
+  var url = util.format('lists/' + id + '/clips?limit=20&offset=%d', opts.offset);
+  console.log('fetching url %s...', url);
+  this.request.get(url, fn);
+};
+
+var initClient = function(username, apitoken) {
+  client = new ListAPI({
+    username: username,
+    api_token: apitoken
+  });
+};
+
+var initOutputFolder = function(cb) {
+  mkdirp(outputpath, function (err) {
+    cb(err);
+  });
+};
+
+var fetchClips = function(listId, done) {
+  var results = [];
+  var getClips = function(listId, offset, cb) {
+    client.getClips(listId, {offset: offset}, function(error, res) {
+      if (error) {
+        console.error(error);
+        cb(error);
+      }
+      var clips = res.objects;
+      _.each(clips, function(clip) {
+        var fieldsToSave = _.pick(clip, 'url', 'notes');
+        results.push(fieldsToSave);
+      });
+      var meta = res.meta;
+      if (clips.length && meta.next) return getClips(listId, offset+20, cb);
+      else cb(null, {results: results, meta: meta});
+    });
+  };
+  getClips(listId, 0, done);
+}
+
+var processList = function(listData, done) {
+  var filename = outputpath + '/' + listData.slug + '.json';
+  fetchClips(listData.id, function(err, clips) {
+    fs.appendFile(filename, JSON.stringify(clips.results, null, 2), function (err) {
+      done();
+    });
+  });
+
+};
+
+var fetchLists = function(done) {
+  console.log('fetching lists...');
+  client.all(function(error, lists) {
+    if (error) return done(error);
+    console.log('found %d lists', lists.objects.length);
+    async.map(lists.objects.slice(0,1), processList, function(err, res) {
+      done(err);
+    });
+  });
+}
+
+if (!argv.username || !argv.apitoken) {
+  console.log('Usage: \n' +
+  '--username=your_kippt_username --apitoken=your_kippt_apitoken --outputpath=path/where/to/output');
+  process.exit(1);
+} else {
+  outputpath = argv.outputpath || './tmp';
+  initClient(argv.username, argv.apitoken);
+  initOutputFolder(function (error) {
+    if (error) {
+      console.error(error);
+      return process.exit(1);
+    }
+    fetchLists(function(err) {
+      if (err) console.error(err);
+      process.exit(0);
+    });
+
+  });
+}
