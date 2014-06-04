@@ -71,7 +71,7 @@ var fetchLists = function(done) {
   client.all(function(error, lists) {
     if (error) return done(error);
     console.log('found %d lists', lists.objects.length);
-    async.map(lists.objects.slice(0,1), processList, function(err, res) {
+    async.map(lists.objects, processList, function(err, res) {
       done(err);
     });
   });
