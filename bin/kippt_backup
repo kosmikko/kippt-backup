@@ -45,7 +45,7 @@ var fetchClips = function(listId, done) {
       }
       var clips = res.objects;
       _.each(clips, function(clip) {
-        var fieldsToSave = _.pick(clip, 'url', 'notes');
+        var fieldsToSave = _.pick(clip, 'url', 'title', 'notes');
         results.push(fieldsToSave);
       });
       var meta = res.meta;
